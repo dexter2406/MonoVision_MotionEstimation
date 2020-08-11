@@ -3,6 +3,25 @@ import numpy as np
 import cv2 as cv
 
 
+def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps):
+
+    if flag_fail == 0:
+        if frmCnt == 0:
+            dist0 = dist1
+
+        elif frmCnt > 0 and frmCnt < 5:
+            meanSet.append(dist1-dist0)
+            dist0 = dist1
+
+        elif frmCnt == 5:
+            meanSet = sum(meanSet) / len(meanSet) * fps
+
+    elif frmCnt == 5:
+        meanSet = sum(meanSet) / len(meanSet) * fps
+
+    return meanSet, dist0
+
+
 def draw_relVel(boxes, relVel, frame_in):
     num = len(boxes)
     if type(relVel) == int:
@@ -16,21 +35,6 @@ def draw_relVel(boxes, relVel, frame_in):
             label = "%.1f:m/s, %.1f:m/s" % (v[0], v[1])
             cv.putText(frame_in, label, org, cv.FONT_HERSHEY_SIMPLEX,
                        0.5, (250, 250, 250), thickness=1)
-
-
-def calc_relVel(dist0, dist1, relVel, flag, fps=24):
-    # store current distances
-    # - dist0 is the object, reVel unchanged
-    if flag == 0:
-        dist0 = np.copy(dist1)
-        flag = 1
-        return relVel, dist0, flag
-    # use stored distances to calc the relative velocities
-    else:
-        reVel = (dist1 - dist0) * fps
-        dist0 = np.copy(dist1)
-        flag = 0
-        return reVel, dist0, flag
 
 
 # unpack the bboxes, calc the distance
