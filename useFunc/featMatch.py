@@ -10,7 +10,7 @@ orb = cv.ORB_create()
 bf = cv.BFMatcher()
 
 
-def feat_match(img_train, img_query, num_fr, size, crop=0.5, foc_len=1000, match_pnts=20):
+def feat_match(img_train, img_query, num_fr, size, crop=1, foc_len=1000, match_pnts=20):
 
     sizeW, sizeH = size
     img_query = img_query[0:int(crop * sizeH), 0:sizeW]

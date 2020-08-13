@@ -39,7 +39,7 @@ fourcc = cv.VideoWriter_fourcc(*'XVID')
 #     return D, L
 
 
-# # Checks if a matrix is a valid rotation matrix.
+# # Checks if box matrix is box valid rotation matrix.
 # def isRotMat(R):
 #     Rt = np.transpose(R)
 #     shouldBeIdentity = np.dot(Rt, R)

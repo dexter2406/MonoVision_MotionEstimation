@@ -1,31 +1,15 @@
 import math
 import numpy as np
 import cv2 as cv
-import time
+
+def convert_box(boxes):
+    newbox = boxes[:, [1, 0, 2, 3]]
+    newbox[:, [2]] = boxes[:, [2]] - boxes[:, [0]]
+    newbox[:, [3]] = boxes[:, [3]] - boxes[:, [1]]
+    return newbox
 
 
-def print_info(frameOut, t, numFr, pitch, delt_p):
-    font = cv.FONT_HERSHEY_SIMPLEX
-    fps = 1/t
-
-    fps = "FPS: %.1f" % (1 / t)
-    print(fps)
-    numInfo = "Frame: %d" % numFr
-    if delt_p > 0:
-        pitchInfo = "Pitch: %.2f(down)" % pitch
-    elif delt_p < 0:
-        pitchInfo = "Pitch: %.2f(up)" % pitch
-    else:
-        pitchInfo = "Pitch: %.2f" % pitch
-
-    cv.putText(frameOut, fps, (50, 50), font, 0.6, (230, 230, 230))
-    cv.putText(frameOut, numInfo, (50, 80), font, 0.6, (230, 230, 230))
-    cv.putText(frameOut, pitchInfo, (50, 110), font, 0.6, (230, 230, 230))
-
-
-def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
-
-    # dafault: calc the relVel for every 5 frames
+def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps):
     # if the tracker funciotns (in normal situ)
     if flag_fail == 0:
 
@@ -34,17 +18,17 @@ def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
             dist0 = dist1
         # - then, store the instant relVel, but it's unstable, therefore
         #   not for output
-        elif frmCnt > 0 and frmCnt < intv_relVel:
-            meanSet.append(dist1-dist0)
+        elif frmCnt > 0 and frmCnt < 5:
+            meanSet.append(dist1 - dist0)
             dist0 = dist1
         # - at the 5th frame, output the mean of the instant relVel
         #   to smooth the value for better stability.
         #   But this introduces delay.
-        elif frmCnt == intv_relVel:
+        elif frmCnt == 5:
             meanSet = sum(meanSet) / len(meanSet) * fps
 
     # if the tracker fails, then output the mean relVel in advance
-    elif frmCnt == intv_relVel:
+    elif frmCnt == 5:
         meanSet = sum(meanSet) / len(meanSet) * fps
 
     # at 1st~4th frames, the results are just for update
@@ -52,7 +36,7 @@ def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
     return meanSet, dist0
 
 
-def draw_relVel(boxes, relVel, frame_in, colors):
+def draw_relVel_keras(boxes, relVel, frame_in):
     num = len(boxes)
     if type(relVel) == int:
         pass
@@ -61,19 +45,14 @@ def draw_relVel(boxes, relVel, frame_in, colors):
         for i in range(num):
             box = boxes[i]
             v = relVel[i]
+            org = (int(box[0]), int(box[1] - 25))
             label = "%.1f:m/s, %.1f:m/s" % (v[0], v[1])
-            textSize, baseLine = cv.getTextSize(label, cv.FONT_HERSHEY_SIMPLEX, 0.5, thickness=1)
-            org_text = (int(box[0]), int(box[1] - 3.5*baseLine))
-            # draw
-            pos1_rec = (int(box[0]), int(box[1] - 7*baseLine))
-            pos2_rec = (int(box[0] + textSize[0]), int(box[1]-3.5*baseLine))
-            cv.rectangle(frame_in, pos1_rec, pos2_rec, (100, 100, 255), cv.FILLED)
-            cv.putText(frame_in, label, org_text, cv.FONT_HERSHEY_SIMPLEX,
-                       0.5, colors[i], thickness=1)
+            cv.putText(frame_in, label, org, cv.FONT_HERSHEY_SIMPLEX,
+                       0.5, (250, 250, 250), thickness=1)
 
 
 # unpack the bboxes, calc the distance
-def calc_distance(boxes, pitch, frame_in, c_pnt, colors, foc_len=1200, H_cam=0.8):
+def calc_distance_keras(boxes, pitch, frame_in, c_pnt, foc_len=1200, H_cam=0.8):
     # original position in degrees
     yaw = 0
     focScale = 1.6     # foc_width/ foc_height
@@ -104,22 +83,10 @@ def calc_distance(boxes, pitch, frame_in, c_pnt, colors, foc_len=1200, H_cam=0.8
 
         # output info
         dis_label = '%.1fm, %.1fm' % (D, L)
-
-        # draw box for obj
-        cv.rectangle(frame_in, p1, p2, (255, 255, 255), 2)
-
-        # draw text
-        # - get text size
-        textSize, baseLine = cv.getTextSize(dis_label, cv.FONT_HERSHEY_SIMPLEX,
-                                            0.5, thickness=1)
-        pos1_rec = (int(left), int(top))
-        pos2_rec = (int(left + textSize[0]), int(top - 3.5*baseLine))
-        # - put on text
-        cv.rectangle(frame_in, pos1_rec, pos2_rec, (100, 100, 255), cv.FILLED)
-        pos_text = (int(left), int(top))
-        cv.putText(frame_in, dis_label, pos_text, cv.FONT_HERSHEY_SIMPLEX, 0.5,
-                   (255, 255, 255), thickness=1)
-
+        p_text = (int(left), int(top) - 5)
+        cv.rectangle(frame_in, p1, p2, (255, 255, 255), 2, 1)
+        cv.putText(frame_in, dis_label, p_text, cv.FONT_HERSHEY_SIMPLEX, 0.6,
+                   (50, 220, 220), thickness=1, lineType=4)
     return frame_in, distancecs
 
 

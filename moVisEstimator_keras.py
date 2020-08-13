@@ -5,21 +5,23 @@ import numpy as np
 import cv2 as cv
 import math
 import matplotlib.pyplot as plt
-from random import randint
-from useFunc.detectAndTrack import *
-from useFunc.utils import *
+from useFunc.detectAndTrack_keras import *
+from useFunc.utils_kerasYolo import *
 from useFunc.featMatch import *
-
+from useFunc.yolov3_mod import YOLO
+from PIL import Image
+from useFunc.utils_kerasYolo import calc_distance_keras
 
 if __name__ == '__main__':
 
     # testing params
-    # frame interval to estimate distance/  # to calc the relVel
-    intv_dist = intv_relVel = 3
+    intv = 5    # frame interval to estimate distance
+    # init yolo class
+    yolo = YOLO()
 
     # settings for read & write video
     prePath = r'C:\ProgamData\global_dataset\img_vid'
-    vidName = r'\vid5_4'
+    vidName = r'\vid1_4'
     fmt = '.mp4'
     cap = cv.VideoCapture(prePath + vidName + fmt)
     fourcc = cv.VideoWriter_fourcc(*'XVID')
@@ -30,15 +32,14 @@ if __name__ == '__main__':
     c_pnt = (int(sizeW / 2), int(sizeH / 2))
     foc_len = 1100
     # init video writer
-    write_name = 'output\\' + vidName + '_lat_corrected_' +'.avi'
-    # vidWrite = cv.VideoWriter(write_name, fourcc, fps_vid, size)
+    write_name = 'output\\' + vidName +'_rv_'+'.avi'
+    vidWrite = cv.VideoWriter(write_name, fourcc, fps_vid, size)
+    font = cv.FONT_HERSHEY_SIMPLEX
 
     # bbox color settings
-    # colors = [(255, 255, 255)]
-    colors = []
-    for i in range(10):
-        # colors.append((randint(0, 255), randint(0, 255), randint(0, 255)))
-        colors.append((255, 255, 255))
+    colors = [(255, 255, 255)]
+    # for i in range(15):
+    #     colors.append((randint(0, 255), randint(0, 255), randint(0, 255)))
 
     # Read first frame, quit if unable to read the video file
     success, _ = cap.read()
@@ -69,7 +70,7 @@ if __name__ == '__main__':
             frame0 = np.copy(frameCopy)
             angs = np.array([0, 0, 0])
             pitch = 0  # orig pose
-        elif numFr % intv_dist == 0:  # angle calc
+        elif numFr % intv == 0:  # angle calc
             angs = feat_match(frame0, frameCopy, numFr, size, crop=1)
             frame0 = np.copy(frameCopy)  # stored for next round
             pitch += angs[0]
@@ -80,17 +81,25 @@ if __name__ == '__main__':
         # 0. the 1st-frame initialization
         # 1. after consecutive M frames
         # 2. tracking fails
-        if (frmCnt == intv_dist or flag_fail == 1) or (numFr == 0):
-            ret_yolo, boxes_yolo = yolov3_det(net, frameCopy)
+        if (frmCnt == 5 or flag_fail == 1) or (numFr == 0):
+            # keras-yolo detect
+            framePIL = cv.cvtColor(frameCopy, cv.COLOR_BGR2RGB)
+            framePIL = Image.fromarray(np.uint8(framePIL))
+            ret_yolo, boxes_yolo = yolo.detect_image(framePIL)
 
             # (re)-init tracker only for valid yolo boxes
             if ret_yolo:
-                frameOut, dist = calc_distance(boxes_yolo, pitch, frameCopy, c_pnt, colors)
-                multiTracker = initTrackObj(boxes_yolo, frameCopy)
+                # frameOut, dist = calc_distance(boxes_yolo, pitch, frameCopy, c_pnt)
+                frameOut, dist = calc_distance_keras(boxes_yolo, pitch, frameCopy, c_pnt)
+                multiTracker = initTrackObj_keras(boxes_yolo, frameCopy)
                 # distSet = np.zeros((5, len(boxes_yolo), 2))
-                flag_fail = frmCnt = flag_relVel = 0
+                flag_fail = 0
+                frmCnt = 0
+                flag_relVel = 0
                 meanSet = []
                 print("frame:%d" % numFr)
+
+            # in case yolo fails
             else:
                 frameOut = np.copy(frameCopy)
                 print("YOLO failed, skip the frame")
@@ -102,10 +111,9 @@ if __name__ == '__main__':
 
             if ret_track:
                 boxes_track = box_tmp
-                frameOut, dist = calc_distance(boxes_track, pitch, frameCopy, c_pnt, colors)
+                frameOut, dist = calc_distance_keras(boxes_track, pitch, frameCopy, c_pnt)
                 # process the distance for relative velocity calc
-                meanSet, dist0 = calc_relVel(dist0, dist, meanSet, frmCnt,
-                                             flag_fail, fps_vid, intv_relVel)
+                meanSet, dist0 = calc_relVel(dist0, dist, meanSet, frmCnt, flag_fail, fps_vid)
                 frmCnt += 1
 
             else:
@@ -115,26 +123,35 @@ if __name__ == '__main__':
                 frameOut = np.copy(frameCopy)
                 print("failed to update frame %d" % numFr)
 
-            if frmCnt == intv_relVel or ret_track is None:
+            if frmCnt == 5 or (ret_track is None):
                 # output relVel, by calc the mean of the local relVel of 5 frames
-                meanSet, _ = calc_relVel(dist0, dist, meanSet, frmCnt,
-                                         flag_fail, fps_vid, intv_relVel)
-                draw_relVel(boxes_track, meanSet, frameOut, colors)
-                meanSet = []
+                meanSet, _ = calc_relVel(dist0, dist, meanSet, frmCnt, flag_fail, fps_vid)
+                draw_relVel_keras(boxes_track, meanSet, frameOut)
 
-        # counter udpate
         numFr += 1
         t = time.time() - t1
 
-        # print info
         if t > 0:
-            print_info(frameOut, t, numFr, pitch, angs[0])
+            fps = "FPS: %.1f" % (1 / t)
+            print(fps)
+            numInfo = "Frame: %d" % numFr
+            if angs[0] > 0:
+                pitchInfo = "Pitch: %.2f(down)" % pitch
+            elif angs[0] < 0:
+                pitchInfo = "Pitch: %.2f(up)" % pitch
+            else:
+                pitchInfo = "Pitch: %.2f" % pitch
 
+            cv.putText(frameOut, fps, (50, 50), font, 0.7, (230, 230, 230))
+            cv.putText(frameOut, numInfo, (50, 80), font, 0.7, (230, 230, 230))
+            cv.putText(frameOut, pitchInfo, (50, 110), font, 0.7, (230, 230, 230))
+        # #
         # plt.imshow(cv.cvtColor(frameOut, cv.COLOR_BGR2RGB)), plt.show()
+        # a=1
         # show frame & write
 
         cv.imshow('MultiTracker', frameOut)
-        # vidWrite.write(frameOut)
+        vidWrite.write(frameOut)
 
         # quit on ESC button
         if cv.waitKey(1) & 0xFF == 27:
