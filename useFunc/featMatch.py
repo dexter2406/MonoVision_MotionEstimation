@@ -10,11 +10,12 @@ orb = cv.ORB_create()
 bf = cv.BFMatcher()
 
 
-def feat_match(img_train, img_query, num_fr, size, crop=1, foc_len=1000, match_pnts=20):
+def feat_match(img_train, img_query, num_fr, size, camMat, crop=1,
+               foc_len=1200, match_pnts=20, thresh=1.5):
 
     sizeW, sizeH = size
-    img_query = img_query[0:int(crop * sizeH), 0:sizeW]
-    img_train = img_train[0:int(crop * sizeH), 0:sizeW]
+    # img_query = img_query[0:int(crop * sizeH), 0:sizeW]
+    # img_train = img_train[0:int(crop * sizeH), 0:sizeW]
     # img_query = img_query[int(crop*sizeH):sizeH, 0:sizeW]
     # img_train = img_train[int(crop*sizeH):sizeH, 0:sizeW]
     kp1, des1 = orb.detectAndCompute(img_train, None)  # query
@@ -22,7 +23,7 @@ def feat_match(img_train, img_query, num_fr, size, crop=1, foc_len=1000, match_p
     # frm = np.copy(img_query)
 
     if len(des1) < 8 or len(des2) < 8:
-        print("cannot compensate ego motion: not enough feature pnts to be matched")
+        print("not enough feature pnts to be matched")
         return None
 
     matches = bf.match(des2, des1)  # pos1 for query
@@ -36,15 +37,15 @@ def feat_match(img_train, img_query, num_fr, size, crop=1, foc_len=1000, match_p
     kpts1 = np.array([kp1[m.trainIdx].pt for m in matches], dtype=np.int)
     kpts2 = np.array([kp2[m.queryIdx].pt for m in matches], dtype=np.int)
 
-    essMat, mask = cv.findEssentialMat(kpts1, kpts2, focal=foc_len, prob=0.9999, threshold=0.1)  # focal length to be revised
-    # essMat, mask = cv.findEssentialMat(kpts1, kpts2, focal=foc_len, method=8, prob=0.9999)
-    matches = [matches[i] for i in range(len(mask)) if mask[i] == 1]
-    img_out = cv.drawMatches(img_query, kp2, img_train, kp1, matches, None,
-                             flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    # essMat, mask = cv.findEssentialMat(kpts1, kpts2, focal=foc_len, prob=0.9999, threshold=0.1)  # focal length to be revised
+    essMat, mask = cv.findEssentialMat(kpts1, kpts2, camMat, prob=0.9999, threshold=0.1)
+    # matches = [matches[i] for i in range(len(mask)) if mask[i] == 1]
+    # img_out = cv.drawMatches(img_query, kp2, img_train, kp1, matches, None,
+    #                          flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     R1, R2, t = cv.decomposeEssentialMat(essMat)
     rotAngs1 = rotMat2EulAng(R1)
     rotAngs2 = rotMat2EulAng(R2)
-    rotAngs, RMat = sel_ang(rotAngs1, rotAngs2, R1, R2)
+    rotAngs, RMat = sel_ang(rotAngs1, rotAngs2, R1, R2, thresh)
     # for i in range(len(rotAngs)):
     #     if abs(rotAngs[i]) > 3:
     #         print("the %sth param: %.3f, frame %s" %(i, rotAngs[i], num_fr))

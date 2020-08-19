@@ -5,22 +5,22 @@ import time
 
 
 def print_info(frameOut, t, numFr, pitch, delt_p):
+
     font = cv.FONT_HERSHEY_SIMPLEX
     fps = 1/t
-
     fps = "FPS: %.1f" % (1 / t)
-    print(fps)
     numInfo = "Frame: %d" % numFr
-    if delt_p > 0:
+
+    if delt_p > 0.01:
         pitchInfo = "Pitch: %.2f(down)" % pitch
-    elif delt_p < 0:
+    elif delt_p < -0.01:
         pitchInfo = "Pitch: %.2f(up)" % pitch
     else:
         pitchInfo = "Pitch: %.2f" % pitch
 
-    cv.putText(frameOut, fps, (50, 50), font, 0.6, (230, 230, 230))
-    cv.putText(frameOut, numInfo, (50, 80), font, 0.6, (230, 230, 230))
-    cv.putText(frameOut, pitchInfo, (50, 110), font, 0.6, (230, 230, 230))
+    cv.putText(frameOut, fps, (50, 50), font, 0.6, (80, 80, 230))
+    cv.putText(frameOut, numInfo, (50, 80), font, 0.6, (80, 80, 230))
+    cv.putText(frameOut, pitchInfo, (50, 110), font, 0.6, (80, 80, 230))
 
 
 def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
@@ -62,11 +62,17 @@ def draw_relVel(boxes, relVel, frame_in, colors):
             box = boxes[i]
             v = relVel[i]
             label = "%.1f:m/s, %.1f:m/s" % (v[0], v[1])
+            # calc box/text positions
             textSize, baseLine = cv.getTextSize(label, cv.FONT_HERSHEY_SIMPLEX, 0.5, thickness=1)
-            org_text = (int(box[0]), int(box[1] - 3.5*baseLine))
+            if box[1] - 7*baseLine > 0:
+                org_text = (int(box[0]), int(box[1] - 3.5*baseLine))
+                pos1_rec = (int(box[0]), int(box[1] - 7*baseLine))
+                pos2_rec = (int(box[0] + textSize[0]), int(box[1]-3.5*baseLine))
+            else:
+                org_text = (int(box[0]), int(box[1] + 7*baseLine))
+                pos1_rec = (int(box[0]), int(box[1] + 4.5*baseLine))
+                pos2_rec = (int(box[0] + textSize[0]), int(box[1]+7.5*baseLine))
             # draw
-            pos1_rec = (int(box[0]), int(box[1] - 7*baseLine))
-            pos2_rec = (int(box[0] + textSize[0]), int(box[1]-3.5*baseLine))
             cv.rectangle(frame_in, pos1_rec, pos2_rec, (100, 100, 255), cv.FILLED)
             cv.putText(frame_in, label, org_text, cv.FONT_HERSHEY_SIMPLEX,
                        0.5, colors[i], thickness=1)
@@ -109,14 +115,20 @@ def calc_distance(boxes, pitch, frame_in, c_pnt, colors, foc_len=1200, H_cam=0.8
         cv.rectangle(frame_in, p1, p2, (255, 255, 255), 2)
 
         # draw text
-        # - get text size
+        # - calc box/text positions
         textSize, baseLine = cv.getTextSize(dis_label, cv.FONT_HERSHEY_SIMPLEX,
                                             0.5, thickness=1)
-        pos1_rec = (int(left), int(top))
-        pos2_rec = (int(left + textSize[0]), int(top - 3.5*baseLine))
-        # - put on text
+        if top - 3.5*baseLine > 0:
+            pos1_rec = (int(left), int(top))
+            pos2_rec = (int(left + textSize[0]), int(top - 3.5*baseLine))
+            pos_text = (int(left), int(top - 0.5*baseLine))
+        else:
+            pos1_rec = (int(left), int(top + 0.5*baseLine))
+            pos2_rec = (int(left + textSize[0]), int(top + 4.5*baseLine))
+            pos_text = (int(left), int(top + 4*baseLine))
+
         cv.rectangle(frame_in, pos1_rec, pos2_rec, (100, 100, 255), cv.FILLED)
-        pos_text = (int(left), int(top))
+        # - put on text
         cv.putText(frame_in, dis_label, pos_text, cv.FONT_HERSHEY_SIMPLEX, 0.5,
                    (255, 255, 255), thickness=1)
 
@@ -151,7 +163,7 @@ def rotMat2EulAng(R):
     return np.array([x, y, z])
 
 
-def sel_ang(ang1, ang2, R1, R2, thresh_change=1.5):
+def sel_ang(ang1, ang2, R1, R2, thresh_change=2):
     # select the more reasonable angles (two sets in total)
     if np.sum(abs(ang2)) > np.sum(abs(ang1)):
         ang = ang1

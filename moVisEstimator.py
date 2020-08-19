@@ -14,12 +14,15 @@ from useFunc.featMatch import *
 if __name__ == '__main__':
 
     # testing params
-    # frame interval to estimate distance/  # to calc the relVel
-    intv_dist = intv_relVel = 3
+    # - frame interval to estimate distance/  # to calc the relVel
+    intv_dist = intv_relVel = 4
+    # - focal length, Camera height
+    foc_len, H_cam = 1200, 0.8
+    thresh = 3
 
     # settings for read & write video
     prePath = r'C:\ProgamData\global_dataset\img_vid'
-    vidName = r'\vid5_4'
+    vidName = r'\vid1_2'
     fmt = '.mp4'
     cap = cv.VideoCapture(prePath + vidName + fmt)
     fourcc = cv.VideoWriter_fourcc(*'XVID')
@@ -28,9 +31,12 @@ if __name__ == '__main__':
     # size = (sizeW*2, int(sizeH*crop))
     size = (sizeW, sizeH)
     c_pnt = (int(sizeW / 2), int(sizeH / 2))
-    foc_len = 1100
+    camMat = np.array([[foc_len, 0, c_pnt[0]],
+                       [0, foc_len/1.6, c_pnt[1]],
+                       [0, 0, 1]])
+
     # init video writer
-    write_name = 'output\\' + vidName + '_lat_corrected_' +'.avi'
+    write_name = 'output\\' + vidName +'.avi'
     # vidWrite = cv.VideoWriter(write_name, fourcc, fps_vid, size)
 
     # bbox color settings
@@ -70,11 +76,10 @@ if __name__ == '__main__':
             angs = np.array([0, 0, 0])
             pitch = 0  # orig pose
         elif numFr % intv_dist == 0:  # angle calc
-            angs = feat_match(frame0, frameCopy, numFr, size, crop=1)
+            angs = feat_match(frame0, frameCopy, numFr, size, camMat=camMat, crop=1,
+                              foc_len=foc_len, match_pnts=20, thresh=thresh)
             frame0 = np.copy(frameCopy)  # stored for next round
             pitch += angs[0]
-
-        # print("pitch:%.2f" % pitch)
 
         # YOLO detection, re-init under conditions:
         # 0. the 1st-frame initialization
@@ -85,7 +90,8 @@ if __name__ == '__main__':
 
             # (re)-init tracker only for valid yolo boxes
             if ret_yolo:
-                frameOut, dist = calc_distance(boxes_yolo, pitch, frameCopy, c_pnt, colors)
+                frameOut, dist = calc_distance(boxes_yolo, pitch, frameCopy, c_pnt,
+                                               colors, foc_len, H_cam)
                 multiTracker = initTrackObj(boxes_yolo, frameCopy)
                 # distSet = np.zeros((5, len(boxes_yolo), 2))
                 flag_fail = frmCnt = flag_relVel = 0
@@ -102,7 +108,8 @@ if __name__ == '__main__':
 
             if ret_track:
                 boxes_track = box_tmp
-                frameOut, dist = calc_distance(boxes_track, pitch, frameCopy, c_pnt, colors)
+                frameOut, dist = calc_distance(boxes_track, pitch, frameCopy, c_pnt,
+                                               colors, foc_len, H_cam)
                 # process the distance for relative velocity calc
                 meanSet, dist0 = calc_relVel(dist0, dist, meanSet, frmCnt,
                                              flag_fail, fps_vid, intv_relVel)
