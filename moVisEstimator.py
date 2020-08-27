@@ -14,21 +14,21 @@ if __name__ == '__main__':
     # - frame interval to estimate distance/  # to calc the relVel
     intv_dist = intv_RV = 4
     # - focal length, Camera height
-    foc_len, H_cam = 900, 2
+    foc_len, H_cam = 1200, 0.8
     thresh = 1
-    orig_pitch = 12
+    orig_pitch = 1
     # -----------------------------
     # scaling factor of fy, due to resize of the original video
     # manually set for testing
     foc_len_scale = 14 / 9
     # -----------------------------
     # Re-calibration settings
-    thresh_cnt_RC = 4  # threshold to count
-    crit_RC = 5        # criteria for do re-cal
+    thresh_cnt_RC = 4       # threshold to count
+    crit_RC = 3*intv_RV     # criteria for do re-cal
 
     # settings for read & write video
     prePath = r'C:\ProgamData\global_dataset\img_vid'
-    vidName = r'\vid9_2'
+    vidName = r'\vid1_4'
     fmt = '.mp4'
     cap = cv.VideoCapture(prePath + vidName + fmt)
     # cap = cv.VideoCapture(0)
@@ -77,21 +77,26 @@ if __name__ == '__main__':
 
         frameCopy = np.copy(frame)
 
-        # Eigen-motion estimation, independent of detection
-        if numFr == 0 or cntRC > 5:
+        # Ego-motion estimation, independent of detection
+        if numFr == 0:
             frame0 = np.copy(frameCopy)
             angs = np.array([0, 0, 0])
             pitch = orig_pitch  # orig pose
-            print("init or re-cal")
         elif numFr % intv_dist == 0:  # angle calc
             angs = feat_match(frame0, frameCopy, numFr, camMat=camMat, crop=1,
                               foc_len=foc_len, match_pnts=20, thresh=thresh)
             frame0 = np.copy(frameCopy)  # stored for next round
             pitch += angs[0]
+
+        # re-cali of EM
         if abs(pitch - orig_pitch) > thresh_cnt_RC:
             cnt_RC += 1
+            if cnt_RC > crit_RC:
+                pitch = orig_pitch  # orig pose
+                print("RE-CAL")
         else:
             cntRC = 0
+
 
         # YOLO detection, re-init under conditions:
         # 0. the 1st-frame initialization
