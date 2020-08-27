@@ -23,10 +23,14 @@ def print_info(frameOut, t, numFr, pitch, delt_p):
     cv.putText(frameOut, pitchInfo, (50, 110), font, 0.6, (80, 80, 230))
 
 
-def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
+def calc_relVel(dist0, dist1, RVtmp_List, frmCnt, flag_fail, fps,
+                intv_RV, flag_RV):
+
+    # flip the flag
+    flag_RV = not flag_RV
 
     # dafault: calc the relVel for every 5 frames
-    # if the tracker funciotns (in normal situ)
+    # if the tracker works (in normal situ)
     if flag_fail == 0:
 
         # - the 1st frame (of each loop) is for init
@@ -34,22 +38,22 @@ def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps, intv_relVel=5):
             dist0 = dist1
         # - then, store the instant relVel, but it's unstable, therefore
         #   not for output
-        elif frmCnt > 0 and frmCnt < intv_relVel:
-            meanSet.append(dist1-dist0)
-            dist0 = dist1
+        elif 0 < frmCnt < intv_RV:
+            RVtmp_List.append(dist1 - dist0)
+            dist0 = dist1   # recursive
         # - at the 5th frame, output the mean of the instant relVel
         #   to smooth the value for better stability.
         #   But this introduces delay.
-        elif frmCnt == intv_relVel:
-            meanSet = sum(meanSet) / len(meanSet) * fps
+        elif frmCnt == intv_RV:
+            RVtmp_List = sum(RVtmp_List) / len(RVtmp_List) * fps
 
     # if the tracker fails, then output the mean relVel in advance
-    elif frmCnt == intv_relVel:
-        meanSet = sum(meanSet) / len(meanSet) * fps
+    else:
+        RVtmp_List = sum(RVtmp_List) / len(RVtmp_List) * fps
 
     # at 1st~4th frames, the results are just for update
     # at 5th frame/ the trakcer fails, the results are for output
-    return meanSet, dist0
+    return RVtmp_List, dist0, flag_RV
 
 
 def draw_relVel(boxes, relVel, frame_in, colors):
@@ -79,10 +83,9 @@ def draw_relVel(boxes, relVel, frame_in, colors):
 
 
 # unpack the bboxes, calc the distance
-def calc_distance(boxes, pitch, frame_in, c_pnt, colors, foc_len=1200, H_cam=0.8):
+def calc_distance(boxes, pitch, frame_in, c_pnt, scaling, colors, foc_len=1200, H_cam=0.8):
     # original position in degrees
     yaw = 0
-    focScale = 1.6     # foc_width/ foc_height
 
     # # TO BE MODIFIED!
     # pitch_d, _, _ = angs        # pitch change
@@ -100,7 +103,7 @@ def calc_distance(boxes, pitch, frame_in, c_pnt, colors, foc_len=1200, H_cam=0.8
         # calc longitude & lateral distance
         lat, h = bot_center[0], bot_center[1]
         angH = math.atan2(h, foc_len)
-        angL = math.atan2(lat, foc_len/focScale)
+        angL = math.atan2(lat, foc_len/scaling)
         D = H_cam / math.tan(angH + math.radians(pitch))
         L = D * math.sin(angL + math.radians(yaw)) / math.cos(angL)
         # D, L = calc_distance(bot_center[0], bot_center[1], angs)

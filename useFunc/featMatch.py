@@ -10,30 +10,27 @@ orb = cv.ORB_create()
 bf = cv.BFMatcher()
 
 
-def feat_match(img_train, img_query, num_fr, size, camMat, crop=1,
-               foc_len=1200, match_pnts=20, thresh=1.5):
+def feat_match(img_train, img_query, num_fr, camMat, crop=1,
+               foc_len=1200, match_pnts=20, thresh=1):
+    # in practice for original video, foc_len can be applied,
+    # in testing for resized video, camMat is applied
 
-    sizeW, sizeH = size
-    # img_query = img_query[0:int(crop * sizeH), 0:sizeW]
-    # img_train = img_train[0:int(crop * sizeH), 0:sizeW]
-    # img_query = img_query[int(crop*sizeH):sizeH, 0:sizeW]
-    # img_train = img_train[int(crop*sizeH):sizeH, 0:sizeW]
-    kp1, des1 = orb.detectAndCompute(img_train, None)  # query
-    kp2, des2 = orb.detectAndCompute(img_query, None)  # train
+    kp1, des1 = orb.detectAndCompute(img_train, None)
+    kp2, des2 = orb.detectAndCompute(img_query, None)
     # frm = np.copy(img_query)
 
     if len(des1) < 8 or len(des2) < 8:
         print("not enough feature pnts to be matched")
-        return None
+        return np.zeros((3,))
 
     matches = bf.match(des2, des1)  # pos1 for query
     if len(matches) < 8:
         print("not enough matches in %d frame, pitch unchanged" % num_fr)
-        return None
+        return np.zeros((3,))
 
+    # sort matches according to score
     matches = sorted(matches, key=lambda x: x.distance)[:match_pnts]
-
-    # img_out = cv.drawKeypoints(frame, kp, None, color=(0,255,0), flags=0)
+    # extract matched-feature coorinates
     kpts1 = np.array([kp1[m.trainIdx].pt for m in matches], dtype=np.int)
     kpts2 = np.array([kp2[m.queryIdx].pt for m in matches], dtype=np.int)
 

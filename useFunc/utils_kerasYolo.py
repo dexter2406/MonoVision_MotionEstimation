@@ -4,9 +4,29 @@ import cv2 as cv
 
 def convert_box(boxes):
     newbox = boxes[:, [1, 0, 2, 3]]
-    newbox[:, [2]] = boxes[:, [2]] - boxes[:, [0]]
-    newbox[:, [3]] = boxes[:, [3]] - boxes[:, [1]]
+    newbox[:, [3]] = boxes[:, [2]] - boxes[:, [0]]
+    newbox[:, [2]] = boxes[:, [3]] - boxes[:, [1]]
     return newbox
+
+
+def print_info(frameOut, t, numFr, pitch, delt_p):
+    font = cv.FONT_HERSHEY_SIMPLEX
+    fps = 1/t
+
+    fps = "FPS: %.1f" % (1 / t)
+    print(fps)
+    numInfo = "Frame: %d" % numFr
+    if delt_p > 0.01:
+        pitchInfo = "Pitch: %.2f(down)" % pitch
+    elif delt_p < -0.01:
+        pitchInfo = "Pitch: %.2f(up)" % pitch
+    else:
+        pitchInfo = "Pitch: %.2f" % pitch
+
+    cv.putText(frameOut, fps, (50, 50), font, 0.6, (80, 80, 230))
+    cv.putText(frameOut, numInfo, (50, 80), font, 0.6, (80, 80, 230))
+    cv.putText(frameOut, pitchInfo, (50, 110), font, 0.6, (80, 80, 230))
+
 
 
 def calc_relVel(dist0, dist1, meanSet, frmCnt, flag_fail, fps):
@@ -46,6 +66,7 @@ def draw_relVel_keras(boxes, relVel, frame_in):
             box = boxes[i]
             v = relVel[i]
             org = (int(box[0]), int(box[1] - 25))
+            print((v[0],  v[1]))
             label = "%.1f:m/s, %.1f:m/s" % (v[0], v[1])
             cv.putText(frame_in, label, org, cv.FONT_HERSHEY_SIMPLEX,
                        0.5, (250, 250, 250), thickness=1)

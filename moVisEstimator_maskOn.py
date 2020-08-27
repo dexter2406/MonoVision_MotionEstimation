@@ -3,35 +3,29 @@ import sys
 import time
 import numpy as np
 import cv2 as cv
+import math
 import matplotlib.pyplot as plt
+from random import randint
 from useFunc.detectAndTrack import *
 from useFunc.utils import *
 from useFunc.featMatch import *
+from useFunc.featMatch_test import *
+from utils.maskObj import maskROI
 
 if __name__ == '__main__':
 
     # testing params
     # - frame interval to estimate distance/  # to calc the relVel
-    intv_dist = intv_RV = 4
+    intv_dist = intv_relVel = 4
     # - focal length, Camera height
-    foc_len, H_cam = 900, 2
+    foc_len, H_cam = 1200, 0.8
     thresh = 1
-    orig_pitch = 12
-    # -----------------------------
-    # scaling factor of fy, due to resize of the original video
-    # manually set for testing
-    foc_len_scale = 14 / 9
-    # -----------------------------
-    # Re-calibration settings
-    thresh_cnt_RC = 4  # threshold to count
-    crit_RC = 5        # criteria for do re-cal
 
     # settings for read & write video
     prePath = r'C:\ProgamData\global_dataset\img_vid'
-    vidName = r'\vid9_2'
+    vidName = r'\vid1_2'
     fmt = '.mp4'
     cap = cv.VideoCapture(prePath + vidName + fmt)
-    # cap = cv.VideoCapture(0)
     fourcc = cv.VideoWriter_fourcc(*'XVID')
     fps_vid = cap.get(cv.CAP_PROP_FPS)
     sizeW, sizeH = int(cap.get(cv.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
@@ -39,17 +33,17 @@ if __name__ == '__main__':
     size = (sizeW, sizeH)
     c_pnt = (int(sizeW / 2), int(sizeH / 2))
     camMat = np.array([[foc_len, 0, c_pnt[0]],
-                       [0, foc_len / foc_len_scale, c_pnt[1]],
+                       [0, foc_len/1.6, c_pnt[1]],
                        [0, 0, 1]])
 
     # init video writer
-    # write_name = 'output\\' + vidName + '.avi'
-    # vidWrite = cv.VideoWriter(write_name, fourcc, fps_vid, size)
+    write_name = 'output\\' + vidName +'maskOn.avi'
+    vidWrite = cv.VideoWriter(write_name, fourcc, fps_vid, size)
 
     # bbox color settings
     # colors = [(255, 255, 255)]
     colors = []
-    for i in range(20):
+    for i in range(10):
         # colors.append((randint(0, 255), randint(0, 255), randint(0, 255)))
         colors.append((255, 255, 255))
 
@@ -60,12 +54,12 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Process video and track objects
-    numFr = 0  # global count
+    numFr = 0   # global count
     frmCnt = 0  # local count
-    flag_fail = 1  # tracker failure report
-    flag_RV = 0  # for relative velocity calc
-    relVel = 0  # init relative velocity
-    cnt_RC = 0  # re-calibration counter
+    flag_fail = 1       # tracker failure report
+    flag_relVel = 0     # for relative velocity calc
+    relVel = 0          # init relative velocity
+    dist0 = 0           # distances of previous frame for relVel calc
     while cap.isOpened():
 
         # see if it's the end
@@ -77,22 +71,6 @@ if __name__ == '__main__':
 
         frameCopy = np.copy(frame)
 
-        # Eigen-motion estimation, independent of detection
-        if numFr == 0 or cntRC > 5:
-            frame0 = np.copy(frameCopy)
-            angs = np.array([0, 0, 0])
-            pitch = orig_pitch  # orig pose
-            print("init or re-cal")
-        elif numFr % intv_dist == 0:  # angle calc
-            angs = feat_match(frame0, frameCopy, numFr, camMat=camMat, crop=1,
-                              foc_len=foc_len, match_pnts=20, thresh=thresh)
-            frame0 = np.copy(frameCopy)  # stored for next round
-            pitch += angs[0]
-        if abs(pitch - orig_pitch) > thresh_cnt_RC:
-            cnt_RC += 1
-        else:
-            cntRC = 0
-
         # YOLO detection, re-init under conditions:
         # 0. the 1st-frame initialization
         # 1. after consecutive M frames
@@ -102,16 +80,26 @@ if __name__ == '__main__':
 
             # (re)-init tracker only for valid yolo boxes
             if ret_yolo:
-                flag_fail = frmCnt = 0
-                flag_RV = False
-                RVtmp_List = []  # tempRV
-                dist0 = 0  # distances of previous frame for relVel calc
+                # BUG: if no obj in 1st frame, it fails
+                # Ego-motion estimation, independent of detection
+                if numFr == 0:  # init
+                    frame0 = np.copy(frameCopy)
+                    angs = np.array([0, 0, 0])
+                    pitch = 0  # orig pose
+                else:
+                    MaskedFrame = maskROI(frameCopy, boxes_yolo)
+                    angs = feat_match(frame0, MaskedFrame, numFr, camMat=camMat, crop=1,
+                                      foc_len=foc_len, match_pnts=20, thresh=thresh)
+                    frame0 = np.copy(frameCopy)  # stored for next round
+                    pitch += angs[0]
+
                 frameOut, dist = calc_distance(boxes_yolo, pitch, frameCopy, c_pnt,
-                                               foc_len_scale, colors, foc_len, H_cam)
-                RVtmp_List, dist0, flag_RV = calc_relVel(dist0, dist, RVtmp_List, frmCnt,
-                                                         flag_fail, fps_vid, intv_RV, flag_RV)
+                                               colors, foc_len, H_cam)
 
                 multiTracker = initTrackObj(boxes_yolo, frameCopy)
+                # distSet = np.zeros((5, len(boxes_yolo), 2))
+                flag_fail = frmCnt = flag_relVel = 0
+                meanSet = []
                 print("frame:%d" % numFr)
             else:
                 frameOut = np.copy(frameCopy)
@@ -125,10 +113,10 @@ if __name__ == '__main__':
             if ret_track:
                 boxes_track = box_tmp
                 frameOut, dist = calc_distance(boxes_track, pitch, frameCopy, c_pnt,
-                                               foc_len_scale, colors, foc_len, H_cam)
+                                               colors, foc_len, H_cam)
                 # process the distance for relative velocity calc
-                RVtmp_List, dist0, flag_RV = calc_relVel(dist0, dist, RVtmp_List, frmCnt,
-                                                         flag_fail, fps_vid, intv_RV, flag_RV)
+                meanSet, dist0 = calc_relVel(dist0, dist, meanSet, frmCnt,
+                                             flag_fail, fps_vid, intv_relVel)
                 frmCnt += 1
 
             else:
@@ -138,12 +126,12 @@ if __name__ == '__main__':
                 frameOut = np.copy(frameCopy)
                 print("failed to update frame %d" % numFr)
 
-            if frmCnt == intv_RV or ret_track is None:
+            if frmCnt == intv_relVel or ret_track is None:
                 # output relVel, by calc the mean of the local relVel of 5 frames
-                RVtmp_List, _, _ = calc_relVel(dist0, dist, RVtmp_List, frmCnt,
-                                               flag_fail, fps_vid, intv_RV, flag_RV)
-                draw_relVel(boxes_track, RVtmp_List, frameOut, colors)
-                RVtmp_List = []
+                meanSet, _ = calc_relVel(dist0, dist, meanSet, frmCnt,
+                                         flag_fail, fps_vid, intv_relVel)
+                draw_relVel(boxes_track, meanSet, frameOut, colors)
+                meanSet = []
 
         # counter udpate
         numFr += 1
@@ -157,7 +145,7 @@ if __name__ == '__main__':
         # show frame & write
 
         cv.imshow('MultiTracker', frameOut)
-        # vidWrite.write(frameOut)
+        vidWrite.write(frameOut)
 
         # quit on ESC button
         if cv.waitKey(1) & 0xFF == 27:
