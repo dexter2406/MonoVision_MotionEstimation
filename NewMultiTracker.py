@@ -46,7 +46,7 @@ if __name__ == '__main__':
     egomotion = True    # turn on ego-motion compensation
 
     # ---------- verify source ---------------------
-    success, _ = cap.read()
+    success, _ = cap.read()     # read 1st frame
     if not success:
         print('Failed to read video')
         sys.exit(1)
