@@ -6,20 +6,24 @@ import matplotlib.pyplot as plt
 import sys
 from useFunc.featMatch import *
 from useFunc.detectAndTrack import *
+from useFunc.utils import print_info
 
 if __name__ == '__main__':
 
     # -----------testing params--------------
     intv_reint = intv_RV = 5    # interval to re-init detector & relative velocity
-    foc_len, H_cam = 1200, 1.8  # foc_len, camera height
+    # foc_len, H_cam = 900, 2     # foc_len, camera height
+    foc_len, H_cam = 1200, 0.8
     thresh = 1
+    # orig_pitch = 6
     orig_pitch = 0
     # - foc_len_scale factor of fy, due to resize of the original video
     #    manually set for testing
-    foc_len_scale = 5/3         # width / height
+    # foc_len_scale = 16/9         # width / height
+    foc_len_scale = 5/3
     # - Re-calibration settings
     thresh_cnt_RC = 4           # threshold to count
-    crit_RC = 2 * intv_RV       # criteria for do re-cal
+    crit_RC = 3 * intv_RV       # criteria for do re-cal
 
     # -----------video prop--------------
     cap = cv.VideoCapture(r"C:\ProgamData\global_dataset\img_vid\vid1_4.mp4")
@@ -33,7 +37,7 @@ if __name__ == '__main__':
     camMat = np.array([[foc_len, 0, c_pnt[0]],
                        [0, foc_len / foc_len_scale, c_pnt[1]],
                        [0, 0, 1]])
-    boxes = [(500, 260, 130, 90), (100, 100, 100, 100)]
+    # boxes = [(500, 260, 130, 90), (100, 100, 100, 100)]
 
     # ----------- other default params -------------
     time2getFps = 1     # 1-sec average fps
@@ -61,6 +65,7 @@ if __name__ == '__main__':
             break
 
         frameCopy = np.copy(frame)
+
         # ------------------- Ego-Motion estimation ----------------------
         # Ego-motion (EM) estimation, independent of others
         if egomotion:
@@ -87,41 +92,46 @@ if __name__ == '__main__':
         if frmCnt_reint == intv_reint or numFr == 0:
             # 0.0 - yolo deteted boxes
             ret_yolo, boxes_yolo = yolov3_det(net, frameCopy)
+
             # print(boxes_yolo)
             # 0.1 - if objects exist, init multi-tracker
             if ret_yolo:
                 frmCnt_reint = 0
                 MultiTracker0 = {}
+                # Boxes_prev = {}
                 idSeed = 0
-                frame0 = np.copy(frameCopy)     # base frame (will be store recursively)
-                frame_for_disp = np.copy(frameCopy)
+                frame0 = np.copy(frameCopy)     # base frame (will be stored recursively)
+                frame_to_disp = np.copy(frameCopy)
                 for box in boxes_yolo:
                     # temp_tracker init
                     box = tuple(box)
                     tracker = cv.TrackerMOSSE_create()
                     ret = tracker.init(frame0, box)
                     if ret:
+                        # Boxes[id] = box
                         MultiTracker0[str(idSeed)] = tracker
                         idSeed += 1
                         # 0.2 - calc & disp distances
-                        dist_new = calc_dist_test(box, pitch, c_pnt, foc_len_scale)  # (long, lat)
-                        frame_for_disp = draw_dist(dist_new, box, frame_for_disp)
+                        dist_new = calc_dist_test(box, pitch, c_pnt, foc_len, foc_len_scale, H_cam)  # (long, lat)
+                        frame_to_disp = draw_dist(dist_new, box, frame_to_disp)
                         pass
                     else:
+                        print('one object cannot be initialzed with tracker')
                         break
+
             # 0.4 - if no object, skip to next frame
             else:
-                frame_for_disp = np.copy(frameCopy)
+                frame_to_disp = np.copy(frameCopy)
                 print("YOLO failed, skip the frame")
-                continue
 
+        # -------------- Detection and Tracking ---------------
         # 1 - normal process
-        else:
+        elif ret_yolo:
             frame1 = np.copy(frameCopy)
-            MultiTracker1 = MultiTracker0.copy()
-            RelVels = {}
-            frmCnt_reint += 1
-            frame_for_disp = np.copy(frameCopy)
+            MultiTracker1 = MultiTracker0.copy()    # multi-tracker to be updated
+            RelVels = {}                            # relative velocity container
+            frmCnt_reint += 1                       # for re-init
+            frame_to_disp = np.copy(frameCopy)      # frame for output
 
             # 1.1 - update for each frame, each box, calc RV
             for id in list(MultiTracker1):
@@ -133,54 +143,43 @@ if __name__ == '__main__':
                     if bool(MultiTracker1):     # if empty then move on to next frame
                         continue
 
+                # -------------- Calc relative distances and velocities ---------------
                 # 1.1.2 - otherwise,calc temp distance_difference between individual trakcers
                 else:
                     # print(box_new)
                     # 1.1.1.1 - calc & disp distance in current frame
-                    dist_new = calc_dist_test(box_new, pitch, c_pnt, foc_len_scale)  # (long, lat)
-                    frame_for_disp = draw_dist(dist_new, box_new, frame_for_disp)
+                    dist_new = calc_dist_test(box_new, pitch, c_pnt, foc_len, foc_len_scale, H_cam)  # (long, lat)
+                    frame_to_disp = draw_dist(dist_new, box_new, frame_to_disp)
                     # 1.1.1.2 - calc prev_dist: longitudinal & lateral
+                    # box_prev = Boxes[id]
                     ret, box_prev = MultiTracker0[id].update(frame0)
-                    dist_prev = calc_dist_test(box_prev, pitch, c_pnt, foc_len_scale)
+                    dist_prev = calc_dist_test(box_prev, pitch, c_pnt, foc_len, foc_len_scale, H_cam)
+                    # if not ret:
+                    #     print("failed to get boxes from prev frame")
 
                     # 1.1.2.1 - calc and display relative_velocity
                     # dim: RelVels = {id: [D,L]}
                     RelVels[id] = [(dist_new[i] - dist_prev[i]) * fps_vid for i in range(2)]
-                    frame_for_disp = draw_RV(RelVels[id], box_new, frame_for_disp)
-                    if ret:
-                        # print(box_prev)
-                        # print(box_new)
-                        pass
-                    else:
-                        print("something wrong with frame0")
+                    frame_to_disp = draw_RV(RelVels[id], box_new, frame_to_disp)
 
             # 2 - recursively store for next round, unless the next one needs re-init
             if (frmCnt_timer + 1) % 5 != 0:
                 MultiTracker0 = MultiTracker1.copy()
-                frame0 = frameCopy
+                frame0 = np.copy(frameCopy)
 
-            # # 3 - output bboxes and RV
-            # if bool(MultiTracker1) is True:     # if not empty
-            #     for id, box_tracker in MultiTracker1.items():
-            #         # draw bboxes
-            #         _, box = box_tracker.update(frame1)
-            #         l, t, w, h = box
-            #         cv.rectangle(frame0, (int(l), int(t)), (int(l + w), int(t + h)), (255, 255, 255))
-            #         print('D:%.1f; L:%.1f' % (RelVels[id][0], RelVels[id][1]))
-            # else:
-            #     print("no object exists")
-
+        # -------------- Other stuff  ---------------
         # 4 - timer for average FPS
         frmCnt_timer += 1
         numFr += 1
         if (time.time() - start_time) > time2getFps:
-            fps = frmCnt_timer / (time.time() - start_time)
+            meanFPS = frmCnt_timer / (time.time() - start_time)
             frmCnt_timer = 0
             start_time = time.time()
-            print("average FPS:%.2f" % fps)
-
-        # plt.imshow(frame_for_disp), plt.show()
-        cv.imshow("new multitracker", frame_for_disp)
+            print("average FPS:%.2f" % meanFPS)
+        # 5 - print info
+        print_info_test(frame_to_disp, meanFPS, numFr, pitch, angs[0])
+        # plt.imshow(frame_to_disp), plt.show()
+        cv.imshow("new multitracker", frame_to_disp)
         if cv.waitKey(1) & 0xFF == 27:
             cap.release()
             break
