@@ -3,31 +3,26 @@ import numpy as np
 import math
 
 
-def print_info_test(frameOut, pitch, yaw, row):
+def print_info_test(frame, meanFPS, numFr, pitch, delt_p):
+
     font = cv.FONT_HERSHEY_SIMPLEX
-    pitchInfo = 'Pitch: %.1f' % pitch
-    yawInfo = 'Yaw: %.1f' % yaw
-    rowInfo = 'Row: %.1f' % row
-    # fps = 1/t
-    # fps = "FPS: %.1f" % (1 / t)
-    # numInfo = "Frame: %d" % numFr
+    FPS_info = "meanFPS:%.2f" % meanFPS
+    numInfo = "Frame: %d" % numFr
 
-    # if delt_p > 0.01:
-    #     pitchInfo = "Pitch: %.2f(down)" % pitch
-    # elif delt_p < -0.01:
-    #     pitchInfo = "Pitch: %.2f(up)" % pitch
-    # else:
-    #     pitchInfo = "Pitch: %.2f" % pitch
+    if delt_p > 0.01:
+        pitchInfo = "Pitch: %.2f(down)" % pitch
+    elif delt_p < -0.01:
+        pitchInfo = "Pitch: %.2f(up)" % pitch
+    else:
+        pitchInfo = "Pitch: %.2f" % pitch
 
-    # cv.putText(frameOut, fps, (50, 50), font, 0.6, (80, 80, 230))
-    # cv.putText(frameOut, numInfo, (50, 80), font, 0.6, (80, 80, 230))
-    cv.putText(frameOut, pitchInfo, (50, 50), font, 1, (80, 80, 230))
-    cv.putText(frameOut, yawInfo, (50, 90), font, 1, (80, 80, 230))
-    cv.putText(frameOut, rowInfo, (50, 130), font, 1, (80, 80, 230))
+    cv.putText(frame, FPS_info, (50, 50), font, 0.6, (80, 80, 230))
+    cv.putText(frame, numInfo, (50, 80), font, 0.6, (80, 80, 230))
+    cv.putText(frame, pitchInfo, (50, 110), font, 0.6, (80, 80, 230))
 
 
 # unpack the bboxes, calc the distance
-def calc_dist_test(box, pitch, c_pnt, scaling, foc_len=1200, H_cam=0.8):
+def calc_dist_test(box, pitch, c_pnt, foc_len, scaling, H_cam):
     # original position in degrees
     yaw = 0
 
