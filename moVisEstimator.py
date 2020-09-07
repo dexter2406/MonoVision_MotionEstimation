@@ -12,23 +12,23 @@ if __name__ == '__main__':
 
     # testing params
     # - frame interval to estimate distance/  # to calc the relVel
-    intv_dist = intv_RV = 4
+    intv_dist = intv_RV = 5
     # - focal length, Camera height
-    foc_len, H_cam = 1200, 0.8
+    foc_len, H_cam = 1200, 1.8
     thresh = 1
-    orig_pitch = 1
+    orig_pitch = 8
     # -----------------------------
-    # scaling factor of fy, due to resize of the original video
+    # foc_len_scale factor of fy, due to resize of the original video
     # manually set for testing
     foc_len_scale = 14 / 9
     # -----------------------------
     # Re-calibration settings
     thresh_cnt_RC = 4       # threshold to count
-    crit_RC = 3*intv_RV     # criteria for do re-cal
+    crit_RC = 2*intv_RV     # criteria for do re-cal
 
     # settings for read & write video
     prePath = r'C:\ProgamData\global_dataset\img_vid'
-    vidName = r'\vid1_4'
+    vidName = r'\vid9_2'
     fmt = '.mp4'
     cap = cv.VideoCapture(prePath + vidName + fmt)
     # cap = cv.VideoCapture(0)
@@ -60,12 +60,15 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Process video and track objects
-    numFr = 0  # global count
-    frmCnt = 0  # local count
-    flag_fail = 1  # tracker failure report
-    flag_RV = 0  # for relative velocity calc
-    relVel = 0  # init relative velocity
-    cnt_RC = 0  # re-calibration counter
+    numFr = 0       # global count
+    frmCnt = 0      # local count
+    flag_fail = 1   # tracker failure report
+    flag_RV = 0     # for relative velocity calc
+    relVel = 0      # init relative velocity
+    cnt_RC = 0      # re-calibration counter
+    angs = np.array([0, 0, 0])
+    pitch = orig_pitch  # orig pose
+    egomotion = True    # turn on ego-motion compensation
     while cap.isOpened():
 
         # see if it's the end
@@ -78,25 +81,23 @@ if __name__ == '__main__':
         frameCopy = np.copy(frame)
 
         # Ego-motion estimation, independent of detection
-        if numFr == 0:
-            frame0 = np.copy(frameCopy)
-            angs = np.array([0, 0, 0])
-            pitch = orig_pitch  # orig pose
-        elif numFr % intv_dist == 0:  # angle calc
-            angs = feat_match(frame0, frameCopy, numFr, camMat=camMat, crop=1,
-                              foc_len=foc_len, match_pnts=20, thresh=thresh)
-            frame0 = np.copy(frameCopy)  # stored for next round
-            pitch += angs[0]
+        if egomotion:
+            if numFr != 0:
+                frame0 = np.copy(frameCopy)
+            elif numFr % intv_dist == 0:
+                angs = feat_match(frame0, frameCopy, numFr, camMat=camMat, crop=1,
+                                  foc_len=foc_len, match_pnts=20, thresh=thresh)
+                frame0 = np.copy(frameCopy)
+                pitch += angs[0]    # pitch angle calc
 
-        # re-cali of EM
-        if abs(pitch - orig_pitch) > thresh_cnt_RC:
-            cnt_RC += 1
-            if cnt_RC > crit_RC:
-                pitch = orig_pitch  # orig pose
-                print("RE-CAL")
-        else:
-            cntRC = 0
-
+            # re-cali of EM
+            if abs(pitch - orig_pitch) > thresh_cnt_RC:
+                cnt_RC += 1
+                if cnt_RC > crit_RC:
+                    pitch = orig_pitch  # orig pose
+                    print("do RE-CALI")
+            else:
+                cntRC = 0
 
         # YOLO detection, re-init under conditions:
         # 0. the 1st-frame initialization

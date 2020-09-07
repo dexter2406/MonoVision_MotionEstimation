@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import sys
 from useFunc.featMatch import *
 from useFunc.detectAndTrack import *
+# from useFunc.detectAndTrack_gpu_test import *
 from useFunc.utils import print_info
+
 
 if __name__ == '__main__':
 
@@ -14,11 +16,11 @@ if __name__ == '__main__':
     intv_reint = 5      # interval to re-init detector
     intv_EM = 3         # interval for ego-motion estmation
     intv_RV = 5         # interval for relative velocity
-    foc_len, H_cam = 1300, 1.8       # foc_len, camera height
-    # foc_len, H_cam = 1200, 0.8
+    # foc_len, H_cam = 1300, 1.8       # foc_len, camera height
+    foc_len, H_cam = 1200, 0.8
     thresh = 1
     # orig_pitch = 6
-    orig_pitch = 5
+    orig_pitch = 0
     # - foc_len_scale factor of fy, due to resize of the original video
     #    manually set for testing
     foc_len_scale = 16/9          # width / height
@@ -54,8 +56,7 @@ if __name__ == '__main__':
     cnt_RC = 0          # re-calibration counter
     angs = np.array([0, 0, 0])
     pitch = orig_pitch  # orig pose
-    egomotion = False    # turn on ego-motion compensation
-
+    egomotion = True   # turn on ego-motion compensation
     # ---------- verify source ---------------------
     success, _ = cap.read()     # read 1st frame
     if not success:
@@ -98,7 +99,7 @@ if __name__ == '__main__':
         if frmCnt_reint == intv_reint or numFr == 0:
             # 0.0 - yolo deteted boxes
             ret_yolo, boxes_yolo = yolov3_det(net, frameCopy)
-
+            # ret_yolo, boxes_yolo = yolov3_detect(net, frameCopy, size)
             # 0.1 - if no object, skip to next frame
             if not ret_yolo:
                 frame_to_disp = np.copy(frameCopy)

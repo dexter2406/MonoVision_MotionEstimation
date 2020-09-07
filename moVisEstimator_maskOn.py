@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     # testing params
     # - frame interval to estimate distance/  # to calc the relVel
-    intv_dist = intv_relVel = 4
+    intv_dist = intv_relVel = 5
     # - focal length, Camera height
     foc_len, H_cam = 1200, 0.8
     thresh = 1
